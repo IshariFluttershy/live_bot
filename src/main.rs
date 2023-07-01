@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use binance::api::Binance;
 use binance::general::General;
@@ -39,31 +40,7 @@ fn main() {
     let klines = retreive_test_data(server_time, &market, symbol, interval, DATA_FOLDER.to_string(), 1, 25);
     let readable_klines = Backtester::to_all_math_kline(klines);
     let arc_klines = Arc::new(readable_klines);
-
-
-    let results = Backtester::new(arc_klines, None, None)
-    .add_strategies(&mut arc_klines)
-    .start()
-    .get_results();
-
-    let mut web_socket = WebSockets::new(|event: WebsocketEvent| {
-        match event {
-            WebsocketEvent::Trade(trade_event) => {
-                println!("Symbol: {}, Price: {}", trade_event.symbol, trade_event.price);
-                // Ici mettre a jour la variable de prix
-                // genre current_price = trade_event.price;
-            },
-            _ => (),
-        };
-        Ok(())
-    });
-
-    web_socket.connect_multiple_streams(&endpoints).unwrap(); // check error
-    if let Err(e) = web_socket.event_loop(&keep_running) {
-        println!("Error: {:?}", e);
-    }
-    web_socket.disconnect().unwrap();
-    /*let strategies = create_w_and_m_pattern_strategies(
+    let mut strategies = create_w_and_m_pattern_strategies(
         START_MONEY,
         ParamMultiplier {
             min: 2.,
@@ -92,9 +69,26 @@ fn main() {
         },
         MarketType::Spot,
     );
-    Backtester::new(arc_klines_clone, tx_clone, i)
-                .add_strategies(&mut strategies)
-                .start()
-                .get_results();*/
 
+    let potential_trades = Backtester::new(arc_klines, None, None, true)
+    .add_strategies(&mut strategies)
+    .start_potential_only();
+
+    let mut web_socket = WebSockets::new(|event: WebsocketEvent| {
+        match event {
+            WebsocketEvent::Trade(trade_event) => {
+                println!("Symbol: {}, Price: {}", trade_event.symbol, trade_event.price);
+                // Ici mettre a jour la variable de prix
+                // genre current_price = trade_event.price;
+            },
+            _ => (),
+        };
+        Ok(())
+    });
+
+    web_socket.connect_multiple_streams(&endpoints).unwrap(); // check error
+    if let Err(e) = web_socket.event_loop(&keep_running) {
+        println!("Error: {:?}", e);
+    }
+    web_socket.disconnect().unwrap();
 }
