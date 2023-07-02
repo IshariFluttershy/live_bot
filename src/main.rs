@@ -4,7 +4,7 @@ use binance::market::Market;
 use binance::websockets::{WebSockets, WebsocketEvent};
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::channel;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use strategy_backtester::backtest::*;
 use strategy_backtester::patterns::*;
@@ -27,7 +27,11 @@ fn main() {
     let endpoints = ["btcusdt@trade".to_string()];
     let keep_running = AtomicBool::new(true);
     let (tx_price, rx_price) = channel::<f64>();
-    let (tx_trades, rx_trades) = channel::<Arc<Vec<Trade>>>();
+    let (tx_price_2, rx_price_2) = channel::<f64>();
+    let (tx_trades, rx_trades) = channel::<Vec<Trade>>();
+    let (tx_opened_trades, rx_opened_trades) = channel::<Trade>();
+    let number_of_klines: Arc<Mutex<u16>> = Arc::new(Mutex::new(50));
+    let number_of_klines_clone = number_of_klines.clone();
 
     thread::spawn(move || {
         let mut last_data_dl: u64 = 0;
@@ -44,6 +48,8 @@ fn main() {
 
             if server_time > last_data_dl + (1_000 * 60) {
                 last_data_dl = server_time;
+                let tmp_num = *number_of_klines.lock().unwrap();
+                *number_of_klines.lock().unwrap() = tmp_num + 1;
 
                 let symbol = "BTCUSDT".to_string();
                 let interval = "1m".to_string();
@@ -54,7 +60,7 @@ fn main() {
                     interval,
                     DATA_FOLDER.to_string(),
                     1,
-                    200,
+                    *number_of_klines.lock().unwrap(),
                 );
                 let readable_klines = Backtester::to_all_math_kline(klines);
                 let arc_klines = Arc::new(readable_klines);
@@ -93,23 +99,25 @@ fn main() {
                     .start_potential_only()
                     .to_vec();
                 println!("après test");
-                tx_trades.send(Arc::new(potential_trades));
+                tx_trades.send(potential_trades);
                 println!("après send");
             }
         }
     });
-    /*thread::spawn(move || {
-        let potential_trades: Vec<Trade> = Backtester::new(arc_klines, None, None, true)
-        .add_strategies(&mut strategies)
-        .start_potential_only().to_vec();
-    tx_trades.send(potential_trades.to_vec());
-    });*/
+
+    thread::spawn(move || {
+        // dès que ca recoit un nouveau trade, ca le met dans la liste des trades open
+
+        // et dès que ca recoit un changement de prix avec rx_price_2, ca check toute la liste voir si il est closed
+
+    });
 
     let mut web_socket = WebSockets::new(|event: WebsocketEvent| {
         match event {
             WebsocketEvent::Trade(trade_event) => {
                 //println!("Symbol: {}, Price: {}", trade_event.symbol, trade_event.price);
                 tx_price.send(trade_event.price.parse::<f64>().unwrap());
+                tx_price_2.send(trade_event.price.parse::<f64>().unwrap());
             }
             _ => (),
         };
@@ -127,9 +135,15 @@ fn main() {
             }
             for trade in &trades[..] {
                 if trade.tp > trade.sl && trade.entry_price <= current_price {
+                    *number_of_klines_clone.lock().unwrap() = 0;
                     println!("Ca prend un trade long. Current price : {} \n trade : {:#?}", current_price, trade);
+                    trades.clear();
+                    break;
                 } else if trade.tp < trade.sl && trade.entry_price >= current_price {
+                    *number_of_klines_clone.lock().unwrap() = 0;
                     println!("Ca prend un trade short. Current price : {} \n trade : {:#?}", current_price, trade);
+                    trades.clear();
+                    break;
                 }
             }
         }
