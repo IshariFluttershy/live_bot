@@ -19,6 +19,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const START_MONEY: f64 = 100.;
 const DATA_FOLDER: &str = "data/";
+const MAX_KLINES: usize = 40;
 
 fn main() {
     /*//let market: Market = Binance::new(None, None);
@@ -37,24 +38,33 @@ fn main() {
     let (tx_kline, rx_kline) = channel::<MathKLine>();
     let number_of_klines: Arc<Mutex<u16>> = Arc::new(Mutex::new(26));
     let number_of_klines_clone = number_of_klines.clone();
-    let max_klines_batch = 70;
     let start = SystemTime::now();
+    let reset_klines: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+    let reset_klines_clone: Arc<Mutex<bool>> = reset_klines.clone();
     let since_the_epoch = start
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards");
+
 
     thread::spawn(move || {
         let klines: &mut Vec<MathKLine> = &mut Vec::new();
         loop {
             let new_kline = rx_kline.recv().unwrap();
             
-            
             if !klines.is_empty() && new_kline.open_time != klines.last().unwrap().close_time + 1{
                 println!("Error, new kline opening time doesn't follow previous kline closing time");
                 klines.clear();
             }
             klines.push(new_kline);
+            if klines.len() > MAX_KLINES {
+                klines.remove(0);
+            }
             println!("kline received, klines length == {}", klines.len());
+
+            if *reset_klines.lock().unwrap() {
+                klines.clear();
+                *reset_klines.lock().unwrap() = false;
+            }
 
             //println!("klines retreived : {:#?}", klines);
             let arc_klines: Arc<Vec<MathKLine>> = Arc::new(klines.to_vec());
@@ -179,6 +189,7 @@ fn main() {
                         let mut clone = trade.clone();
                         clone.loss = START_MONEY * 0.01 * 1.;
                         clone.benefits = START_MONEY * 0.01 * 2.;
+                        *reset_klines_clone.lock().unwrap() = true;
                         tx_opened_trades.send(clone);
                         trades.clear();
                         break;
@@ -192,6 +203,7 @@ fn main() {
                         let mut clone = trade.clone();
                         clone.loss = START_MONEY * 0.01 * 1.;
                         clone.benefits = START_MONEY * 0.01 * 2.;
+                        *reset_klines_clone.lock().unwrap() = true;
                         tx_opened_trades.send(clone);
                         trades.clear();
                         break;
