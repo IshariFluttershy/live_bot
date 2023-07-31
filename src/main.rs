@@ -4,6 +4,7 @@ use binance::market::Market;
 use binance::model::Kline;
 use binance::websockets::{WebSockets, WebsocketEvent};
 use std::fs::read;
+use std::ptr::null;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
@@ -55,7 +56,7 @@ fn main() {
             klines.push(new_kline);
             println!("kline received, klines length == {}", klines.len());
 
-            println!("klines retreived : {:#?}", klines);
+            //println!("klines retreived : {:#?}", klines);
             let arc_klines: Arc<Vec<MathKLine>> = Arc::new(klines.to_vec());
             let mut strategies = create_w_and_m_pattern_strategies(
                 START_MONEY,
@@ -134,6 +135,7 @@ fn main() {
     });
 
     let mut last_kline_close_time = 0;
+    let mut last_frame_kline: Option<Kline> = None;
 
     let mut web_socket = WebSockets::new(|event: WebsocketEvent| {
         match event {
@@ -143,16 +145,13 @@ fn main() {
                 tx_price_2.send(trade_event.price.parse::<f64>().unwrap());
             },
             WebsocketEvent::Kline(kline_event) => {
-                if last_kline_close_time == 0 || last_kline_close_time + 1 == kline_event.kline.open_time {
+                if (last_kline_close_time == 0 || last_kline_close_time + 1 == kline_event.kline.open_time) && last_frame_kline.is_some() {
                     last_kline_close_time = kline_event.kline.close_time;
-                    tx_kline.send(Backtester::kline_to_math_kline(&kline_event.kline));
+                    tx_kline.send(Backtester::kline_to_math_kline(&last_frame_kline.clone().unwrap()));
                 }
-                    // ICI 
-                // prendre le closing time de la dernière kline et le comparer avec l'open time de la kline recue a l'instant.
-                // Si l'open time de la kline recue est le close time + 1 alors, ajouter la kline dans la liste et mettre a jour le closing time de la dernière kline avec la nouvelle
-
                 
-                println!("Kline event received : {:#?}", kline_event.kline.open_time);
+                //println!("Kline event received : {:#?}", kline_event.kline.open_time);
+                last_frame_kline = Some(kline_event.kline);
             },
             _ => (),
         };
