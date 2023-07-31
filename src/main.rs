@@ -1,6 +1,7 @@
 use binance::api::Binance;
 use binance::general::General;
 use binance::market::Market;
+use binance::model::Kline;
 use binance::websockets::{WebSockets, WebsocketEvent};
 use std::fs::read;
 use std::sync::atomic::AtomicBool;
@@ -32,6 +33,7 @@ fn main() {
     let (tx_price_2, rx_price_2) = channel::<f64>();
     let (tx_trades, rx_trades) = channel::<Vec<Trade>>();
     let (tx_opened_trades, rx_opened_trades) = channel::<Trade>();
+    let (tx_kline, rx_kline) = channel::<MathKLine>();
     let number_of_klines: Arc<Mutex<u16>> = Arc::new(Mutex::new(26));
     let number_of_klines_clone = number_of_klines.clone();
     let max_klines_batch = 70;
@@ -41,75 +43,54 @@ fn main() {
         .expect("Time went backwards");
 
     thread::spawn(move || {
-        let mut last_data_dl: u64 = 0;
+        let klines: &mut Vec<MathKLine> = &mut Vec::new();
         loop {
-            let mut server_time = 0;
-            let result = general.get_server_time();
-            match result {
-                Ok(answer) => {
-                    server_time = answer.server_time;
-                }
-                Err(e) => println!("Error: {}", e),
+            let new_kline = rx_kline.recv().unwrap();
+            
+            
+            if !klines.is_empty() && new_kline.open_time != klines.last().unwrap().close_time + 1{
+                println!("Error, new kline opening time doesn't follow previous kline closing time");
+                klines.clear();
             }
+            klines.push(new_kline);
+            println!("kline received, klines length == {}", klines.len());
 
-            if server_time > last_data_dl + (1_000 * 60) {
-                println!("Server Time: {}", server_time);
-                last_data_dl = server_time;
-                let tmp_num = *number_of_klines.lock().unwrap();
-                if tmp_num < max_klines_batch {
-                    *number_of_klines.lock().unwrap() = tmp_num + 1;
-                }
-                println!("size of klines batch : {}", tmp_num + 1);
-
-                let symbol = "BTCUSDT".to_string();
-                let interval = "1m".to_string();
-                let klines = retreive_test_data(
-                    server_time,
-                    &market,
-                    symbol,
-                    interval,
-                    DATA_FOLDER.to_string(),
-                    1,
-                    *number_of_klines.lock().unwrap(),
-                );
-                let readable_klines = Backtester::to_all_math_kline(klines);
-                println!("klines retreived : {:#?}", readable_klines);
-                let arc_klines = Arc::new(readable_klines);
-                let mut strategies = create_w_and_m_pattern_strategies(
-                    START_MONEY,
-                    ParamMultiplier {
-                        min: 2.,
-                        max: 2.,
-                        step: 1.,
-                    },
-                    ParamMultiplier {
-                        min: 1.,
-                        max: 1.,
-                        step: 2.,
-                    },
-                    ParamMultiplier {
-                        min: 1,
-                        max: 3,
-                        step: 1,
-                    },
-                    ParamMultiplier {
-                        min: 25,
-                        max: 25,
-                        step: 5,
-                    },
-                    ParamMultiplier {
-                        min: 1.,
-                        max: 1.,
-                        step: 1.,
-                    },
-                    MarketType::Spot,
-                );
-                let potential_trades: Vec<Trade> = Backtester::new(arc_klines, None, None, true)
-                    .add_strategies(&mut strategies)
-                    .start_potential_only()
-                    .to_vec();
-                tx_trades.send(potential_trades);
-            }
+            println!("klines retreived : {:#?}", klines);
+            let arc_klines: Arc<Vec<MathKLine>> = Arc::new(klines.to_vec());
+            let mut strategies = create_w_and_m_pattern_strategies(
+                START_MONEY,
+                ParamMultiplier {
+                    min: 2.,
+                    max: 2.,
+                    step: 1.,
+                },
+                ParamMultiplier {
+                    min: 1.,
+                    max: 1.,
+                    step: 2.,
+                },
+                ParamMultiplier {
+                    min: 1,
+                    max: 3,
+                    step: 1,
+                },
+                ParamMultiplier {
+                    min: 25,
+                    max: 25,
+                    step: 5,
+                },
+                ParamMultiplier {
+                    min: 1.,
+                    max: 1.,
+                    step: 1.,
+                },
+                MarketType::Spot,
+            );
+            let potential_trades: Vec<Trade> = Backtester::new(arc_klines, None, None, true)
+                .add_strategies(&mut strategies)
+                .start_potential_only()
+                .to_vec();
+            tx_trades.send(potential_trades);
         }
     });
 
@@ -162,12 +143,16 @@ fn main() {
                 tx_price_2.send(trade_event.price.parse::<f64>().unwrap());
             },
             WebsocketEvent::Kline(kline_event) => {
-                last_kline_close_time // ICI 
+                if last_kline_close_time == 0 || last_kline_close_time + 1 == kline_event.kline.open_time {
+                    last_kline_close_time = kline_event.kline.close_time;
+                    tx_kline.send(Backtester::kline_to_math_kline(&kline_event.kline));
+                }
+                    // ICI 
                 // prendre le closing time de la dernière kline et le comparer avec l'open time de la kline recue a l'instant.
                 // Si l'open time de la kline recue est le close time + 1 alors, ajouter la kline dans la liste et mettre a jour le closing time de la dernière kline avec la nouvelle
 
                 
-                println!("Kline : {:#?}", kline_event.kline);
+                println!("Kline event received : {:#?}", kline_event.kline.open_time);
             },
             _ => (),
         };
