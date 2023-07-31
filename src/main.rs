@@ -26,7 +26,7 @@ fn main() {
 
     let market: Market = Binance::new(None, None);
     let general: General = Binance::new(None, None);
-    let endpoints = ["btcusdt@trade".to_string()];
+    let endpoints = ["btcusdt@trade".to_string(), "btcusdt@kline_1m".to_string()];
     let keep_running = AtomicBool::new(true);
     let (tx_price, rx_price) = channel::<f64>();
     let (tx_price_2, rx_price_2) = channel::<f64>();
@@ -152,13 +152,23 @@ fn main() {
         }
     });
 
+    let mut last_kline_close_time = 0;
+
     let mut web_socket = WebSockets::new(|event: WebsocketEvent| {
         match event {
             WebsocketEvent::Trade(trade_event) => {
                 //println!("Symbol: {}, Price: {}", trade_event.symbol, trade_event.price);
                 tx_price.send(trade_event.price.parse::<f64>().unwrap());
                 tx_price_2.send(trade_event.price.parse::<f64>().unwrap());
-            }
+            },
+            WebsocketEvent::Kline(kline_event) => {
+                last_kline_close_time // ICI 
+                // prendre le closing time de la dernière kline et le comparer avec l'open time de la kline recue a l'instant.
+                // Si l'open time de la kline recue est le close time + 1 alors, ajouter la kline dans la liste et mettre a jour le closing time de la dernière kline avec la nouvelle
+
+                
+                println!("Kline : {:#?}", kline_event.kline);
+            },
             _ => (),
         };
         Ok(())
