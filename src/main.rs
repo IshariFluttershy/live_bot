@@ -1,3 +1,4 @@
+use binance::account::{OrderSide, OrderType, self, Account};
 use binance::api::Binance;
 use binance::general::General;
 use binance::market::Market;
@@ -16,8 +17,11 @@ use strategy_backtester::strategies_creator::*;
 use strategy_backtester::tools::retreive_test_data;
 use strategy_backtester::*;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::env;
+use dotenv::dotenv;
+use round::{round, round_up, round_down};
 
-const START_MONEY: f64 = 100.;
+const START_MONEY: f64 = 20.;
 const DATA_FOLDER: &str = "data/";
 const MAX_KLINES: usize = 40;
 
@@ -26,10 +30,21 @@ fn main() {
     //let general: FuturesGeneral = Binance::new(None, None);
     let keep_running = AtomicBool::new(true);*/
  // Used to control the event loop
+    //let api_key = Some(env!("API_KEY").into());
+    //let secret_key = Some(env!("SECRET_KEY").into());
+//
+    //println!("api_key = {:#?}", api_key);
+    //println!("secret_key = {:#?}", secret_key);
+
+    dotenv().ok();
+    let api_key = env::var("API_KEY").expect("Error: API_KEY not found");
+    let secret_key = env::var("SECRET_KEY").expect("Error: SECRET_KEY not found");
+
+    let account: Account = Binance::new(Some(api_key), Some(secret_key));
 
     let market: Market = Binance::new(None, None);
     let general: General = Binance::new(None, None);
-    let endpoints = ["btcusdt@trade".to_string(), "btcusdt@kline_1m".to_string()];
+    let endpoints = ["btctusd@trade".to_string(), "btctusd@kline_1m".to_string()];
     let keep_running = AtomicBool::new(true);
     let (tx_price, rx_price) = channel::<f64>();
     let (tx_price_2, rx_price_2) = channel::<f64>();
@@ -45,6 +60,21 @@ fn main() {
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards");
 
+    println!("bot started");
+
+    /*println!("avant");
+    match account.market_sell("BTCUSDT", 0.00040) {
+        Ok(answer) => {
+            match account.OCO_order("BTCUSDT", 0.00040, 25740., 25780., round_price("BTCUSDT", 25780.*1.0001), OrderSide::Buy, account::TimeInForce::GTC, None) {
+                Ok(answer) => println!("{:?}", answer),
+                Err(e) => println!("Error: {:?}", e),
+            }
+        },
+        Err(e) => println!("Error: {:?}", e),
+    }
+
+    println!("arpres");
+    return;*/
 
     thread::spawn(move || {
         let klines: &mut Vec<MathKLine> = &mut Vec::new();
@@ -182,28 +212,63 @@ fn main() {
             let mut i = 0;
             while i < trades.len() {
                 let (trade, opening_time) = &trades[i];
-                if trade.tp > trade.sl {
+                if trade.tp > trade.sl { // Trade Long
                     if trade.entry_price <= current_price {
                         *number_of_klines_clone.lock().unwrap() = 0;
                         println!("Ca prend un trade long. Current price : {} \n trade : {:#?}", current_price, trade);
                         let mut clone = trade.clone();
                         clone.loss = START_MONEY * 0.01 * 1.;
                         clone.benefits = START_MONEY * 0.01 * 2.;
+                        clone.lots = START_MONEY/clone.entry_price; 
                         *reset_klines_clone.lock().unwrap() = true;
+
+
+                        println!("Trade long");
+                        println!("{:#?}", clone);
+                        println!("{:#?}", round_price("", clone.sl*0.9999));
+                        match account.market_buy("BTCTUSD", round_lots("", clone.lots)) {
+                            Ok(answer) => {
+                                println!("après le market");
+                                match account.OCO_order("BTCTUSD", round_lots("", clone.lots), round_price("", clone.tp), round_price("", clone.sl), round_price("", clone.sl*0.9999), OrderSide::Sell, account::TimeInForce::GTC, None) {
+                                    Ok(answer) => println!("{:?}", answer),
+                                    Err(e) => println!("Error: {:?}", e),
+                                }
+                            },
+                            Err(e) => println!("Error: {:?}", e),
+                        }
+
+
                         tx_opened_trades.send(clone);
                         trades.clear();
                         break;
                     } else if current_price < trade.sl {
                         trades.swap_remove(i);
                     }
-                } else if trade.tp < trade.sl {
+                } else if trade.tp < trade.sl { // Trade Short
                     if trade.entry_price >= current_price {
                         *number_of_klines_clone.lock().unwrap() = 0;
                         println!("Ca prend un trade short. Current price : {} \n trade : {:#?}", current_price, trade);
                         let mut clone = trade.clone();
                         clone.loss = START_MONEY * 0.01 * 1.;
                         clone.benefits = START_MONEY * 0.01 * 2.;
+                        clone.lots = START_MONEY/clone.entry_price; 
                         *reset_klines_clone.lock().unwrap() = true;
+                        
+                        println!("Trade short");
+                        println!("{:#?}", clone);
+                        println!("{:#?}", round_price("", clone.sl*1.0001));
+                        match account.market_sell("BTCTUSD", round_lots("", clone.lots)) {
+                            Ok(answer) => {
+                                println!("après le market");
+                                match account.OCO_order("BTCTUSD", round_lots("", clone.lots), round_price("", clone.tp), round_price("", clone.sl), round_price("", clone.sl*1.0001), OrderSide::Buy, account::TimeInForce::GTC, None) {
+                                    Ok(answer) => println!("{:?}", answer),
+                                    Err(e) => println!("Error: {:?}", e),
+                                }
+                            },
+                            Err(e) => println!("Error: {:?}", e),
+                        }
+                    
+                        
                         tx_opened_trades.send(clone);
                         trades.clear();
                         break;
@@ -223,4 +288,12 @@ fn main() {
         println!("Error: {:?}", e);
     }
     web_socket.disconnect().unwrap();
+}
+
+fn round_price(symbol: &str, price: f64) -> f64 {
+    round(price, 2)
+}
+
+fn round_lots(symbol: &str, lots: f64) -> f64 {
+    round(lots, 5)
 }
