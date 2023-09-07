@@ -111,13 +111,13 @@ fn main() {
                     step: 2.,
                 },
                 ParamMultiplier {
-                    min: 1,
+                    min: 3,
                     max: 3,
                     step: 1,
                 },
                 ParamMultiplier {
-                    min: 25,
-                    max: 25,
+                    min: 40,
+                    max: 40,
                     step: 5,
                 },
                 ParamMultiplier {
