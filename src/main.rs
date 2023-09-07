@@ -89,7 +89,7 @@ fn main() {
             if klines.len() > MAX_KLINES {
                 klines.remove(0);
             }
-            println!("kline received, klines length == {}", klines.len());
+            //println!("kline received, klines length == {}", klines.len());
 
             if *reset_klines.lock().unwrap() {
                 klines.clear();
@@ -207,7 +207,7 @@ fn main() {
                 for trade in received_trades {
                     trades.push((trade, current_time));
                 }
-                println!("{} trades potentiels", trades.len());
+                //println!("{} trades potentiels", trades.len());
             }
             let mut i = 0;
             while i < trades.len() {
@@ -223,9 +223,6 @@ fn main() {
                         *reset_klines_clone.lock().unwrap() = true;
 
 
-                        println!("Trade long");
-                        println!("{:#?}", clone);
-                        println!("{:#?}", round_price("", clone.sl*0.9999));
                         match account.market_buy("BTCTUSD", round_lots("", clone.lots)) {
                             Ok(answer) => {
                                 println!("après le market");
@@ -254,9 +251,7 @@ fn main() {
                         clone.lots = START_MONEY/clone.entry_price; 
                         *reset_klines_clone.lock().unwrap() = true;
                         
-                        println!("Trade short");
-                        println!("{:#?}", clone);
-                        println!("{:#?}", round_price("", clone.sl*1.0001));
+
                         match account.market_sell("BTCTUSD", round_lots("", clone.lots)) {
                             Ok(answer) => {
                                 println!("après le market");
