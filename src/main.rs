@@ -101,23 +101,23 @@ fn main() {
             let mut strategies = create_w_and_m_pattern_strategies(
                 START_MONEY,
                 ParamMultiplier {
-                    min: 2.,
-                    max: 2.,
+                    min: 1.,
+                    max: 1.,
                     step: 1.,
                 },
                 ParamMultiplier {
-                    min: 1.,
-                    max: 1.,
+                    min: 0.5,
+                    max: 0.5,
                     step: 2.,
                 },
                 ParamMultiplier {
-                    min: 3,
-                    max: 3,
+                    min: 2,
+                    max: 2,
                     step: 1,
                 },
                 ParamMultiplier {
-                    min: 40,
-                    max: 40,
+                    min: 25,
+                    max: 25,
                     step: 5,
                 },
                 ParamMultiplier {
