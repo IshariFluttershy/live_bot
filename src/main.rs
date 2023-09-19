@@ -226,7 +226,11 @@ fn main() {
                         match account.market_buy("BTCTUSD", round_lots("", clone.lots)) {
                             Ok(answer) => {
                                 println!("après le market");
-                                match account.OCO_order("BTCTUSD", round_lots("", clone.lots), round_price("", clone.tp), round_price("", clone.sl), round_price("", clone.sl*0.9999), OrderSide::Sell, account::TimeInForce::GTC, None) {
+
+                                let market_variations_tp = answer.price + (trade.tp - trade.entry_price);
+                                let market_variations_sl = answer.price - (trade.entry_price - trade.sl);
+
+                                match account.OCO_order("BTCTUSD", round_lots("", clone.lots), round_price("", market_variations_tp), round_price("", market_variations_sl), round_price("", market_variations_tp*0.9999), OrderSide::Sell, account::TimeInForce::GTC, None) {
                                     Ok(answer) => println!("{:?}", answer),
                                     Err(e) => println!("Error: {:?}", e),
                                 }
@@ -251,11 +255,14 @@ fn main() {
                         clone.lots = START_MONEY/clone.entry_price; 
                         *reset_klines_clone.lock().unwrap() = true;
                         
-
                         match account.market_sell("BTCTUSD", round_lots("", clone.lots)) {
                             Ok(answer) => {
                                 println!("après le market");
-                                match account.OCO_order("BTCTUSD", round_lots("", clone.lots), round_price("", clone.tp), round_price("", clone.sl), round_price("", clone.sl*1.0001), OrderSide::Buy, account::TimeInForce::GTC, None) {
+
+                                let market_variations_tp = answer.price - (trade.entry_price - trade.tp);
+                                let market_variations_sl = answer.price + (trade.sl - trade.entry_price);
+
+                                match account.OCO_order("BTCTUSD", round_lots("", clone.lots), round_price("", market_variations_tp), round_price("", market_variations_sl), round_price("", market_variations_sl*1.0001), OrderSide::Buy, account::TimeInForce::GTC, None) {
                                     Ok(answer) => println!("{:?}", answer),
                                     Err(e) => println!("Error: {:?}", e),
                                 }
