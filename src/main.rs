@@ -24,6 +24,7 @@ use round::{round, round_up, round_down};
 const START_MONEY: f64 = 20.;
 const DATA_FOLDER: &str = "data/";
 const MAX_KLINES: usize = 40;
+const TRADING_SYMBOL: &str = "BTCFDUSD";
 
 fn main() {
     /*//let market: Market = Binance::new(None, None);
@@ -44,7 +45,8 @@ fn main() {
 
     let market: Market = Binance::new(None, None);
     let general: General = Binance::new(None, None);
-    let endpoints = ["btctusd@trade".to_string(), "btctusd@kline_1m".to_string()];
+    let lower_case_trading_symbol = TRADING_SYMBOL.to_lowercase();
+    let endpoints = [lower_case_trading_symbol.to_string() + "@trade", lower_case_trading_symbol.to_string() + "@kline_1m"];
     let keep_running = AtomicBool::new(true);
     let (tx_price, rx_price) = channel::<f64>();
     let (tx_price_2, rx_price_2) = channel::<f64>();
@@ -223,14 +225,14 @@ fn main() {
                         *reset_klines_clone.lock().unwrap() = true;
 
 
-                        match account.market_buy("BTCTUSD", round_lots("", clone.lots)) {
+                        match account.market_buy(TRADING_SYMBOL, round_lots("", clone.lots)) {
                             Ok(answer) => {
                                 println!("après le market");
 
                                 let market_variations_tp = answer.price + (trade.tp - trade.entry_price);
                                 let market_variations_sl = answer.price - (trade.entry_price - trade.sl);
 
-                                match account.OCO_order("BTCTUSD", round_lots("", clone.lots), round_price("", market_variations_tp), round_price("", market_variations_sl), round_price("", market_variations_tp*0.9999), OrderSide::Sell, account::TimeInForce::GTC, None) {
+                                match account.OCO_order(TRADING_SYMBOL, round_lots("", clone.lots), round_price("", market_variations_tp), round_price("", market_variations_sl), round_price("", market_variations_tp*0.9999), OrderSide::Sell, account::TimeInForce::GTC, None) {
                                     Ok(answer) => println!("{:?}", answer),
                                     Err(e) => println!("Error: {:?}", e),
                                 }
@@ -255,14 +257,14 @@ fn main() {
                         clone.lots = START_MONEY/clone.entry_price; 
                         *reset_klines_clone.lock().unwrap() = true;
                         
-                        match account.market_sell("BTCTUSD", round_lots("", clone.lots)) {
+                        match account.market_sell(TRADING_SYMBOL, round_lots("", clone.lots)) {
                             Ok(answer) => {
                                 println!("après le market");
 
                                 let market_variations_tp = answer.price - (trade.entry_price - trade.tp);
                                 let market_variations_sl = answer.price + (trade.sl - trade.entry_price);
 
-                                match account.OCO_order("BTCTUSD", round_lots("", clone.lots), round_price("", market_variations_tp), round_price("", market_variations_sl), round_price("", market_variations_sl*1.0001), OrderSide::Buy, account::TimeInForce::GTC, None) {
+                                match account.OCO_order(TRADING_SYMBOL, round_lots("", clone.lots), round_price("", market_variations_tp), round_price("", market_variations_sl), round_price("", market_variations_sl*1.0001), OrderSide::Buy, account::TimeInForce::GTC, None) {
                                     Ok(answer) => println!("{:?}", answer),
                                     Err(e) => println!("Error: {:?}", e),
                                 }
